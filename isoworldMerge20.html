@@ -1,0 +1,2587 @@
+<!doctype html>
+<html lang='en'>
+<head>
+<meta charset='UTF-8'>
+<title>HTML5:Diablo</title>
+
+</head>
+
+<body>
+<style>
+body{
+    -moz-transform:scale(1),
+            -webkit-transform:scale(1),
+            -o-transform:scale(1),
+            -ms-transform:scale(1);
+
+}
+#worldcanvas{
+position:relative;
+background-color:black;
+display:block; margin:100px auto 0px;
+pointer-events: none;
+}
+
+
+.renderer{
+position:relative;
+display:block; margin:-576px auto 0px;
+pointer-events: none;
+}
+
+#guiCanvas{
+position:relative;
+display:block; margin:-576px auto 0px;
+
+cursor:url(diablo_cursor.png), auto;
+}
+.divrenderer{
+padding:0px;
+
+
+}
+@font-face
+{
+font-family: DIABLO;
+src: url('diablo_h.ttf')format('truetype'),
+		url('diablo_h.woff')format('woff');
+	
+}
+document{
+font-family:DIABLO;
+
+}
+</style>
+
+<canvas id='worldcanvas' class='renderer' width='720' height='576' >BROWSER SUCKS</canvas>
+<canvas id='Death_Canvas' class='renderer' width='720' height='576' >BROWSER SUCKS</canvas>
+<canvas id='worldAssetCanvas' class='renderer' width='720' height='576' >BROWSER SUCKS</canvas>
+
+<canvas id='guiCanvas' width='720'height='576'>BROWSER SUCKS</canvas>
+
+
+<script src='OBSLIB.js'></script>
+
+
+<script>
+(function() {
+    var lastTime = 0;
+    var vendors = ['ms', 'moz', 'webkit', 'o'];
+    for(var x = 0; x < vendors.length && !window.requestAnimationFrame; ++x) {
+        window.requestAnimationFrame = window[vendors[x]+'RequestAnimationFrame'];
+        window.cancelAnimationFrame =  window[vendors[x]+'CancelAnimationFrame'] || window[vendors[x]+'CancelRequestAnimationFrame'];
+    }
+ 
+    if (!window.requestAnimationFrame)
+        window.requestAnimationFrame = function(callback, element) {
+            var currTime = new Date().getTime();
+            var timeToCall = Math.max(0, 30 - (currTime - lastTime));
+            var id = window.setTimeout(function() { callback(currTime + timeToCall); }, 
+              timeToCall);
+            lastTime = currTime + timeToCall;
+            return id;
+        };
+ 
+    if (!window.cancelAnimationFrame)
+        window.cancelAnimationFrame = function(id) {
+            clearTimeout(id);
+        };
+}());
+//Game Mode 
+var Game_Ready=false;
+var Game_Mode=false;
+var Play=false;
+
+//Game Mode
+//Iso world global var
+var ASSET_MANAGER = new AssetManager();
+var Menu_MANAGER = new AssetManager();
+var Sound_MANAGER = new SoundManager();
+var wcanvas = document.getElementById('worldcanvas');
+var wAssetcanvas = document.getElementById('worldAssetCanvas');
+var Death_Canvas=document.getElementById('Death_Canvas');
+var guiCanvas = document.getElementById('guiCanvas');
+
+
+var wAssets= wAssetcanvas.getContext('2d');
+  wAssets.font = '30px DIABLO';
+var w= wcanvas.getContext('2d');
+var death_ctx=Death_Canvas.getContext('2d');
+var gcanvas=guiCanvas.getContext('2d');
+
+var screen={up:false,down:false,left:false,right:false};
+//var atr=false;
+const atrlimiter = 163;
+const atrviewer=50;
+var screencol,screenrow;
+var collimit,rowlimit;
+const tilewidth=100;
+const tileheight=50;
+var world_grid=80;
+var grid={width:80,height:80};
+
+var tileMap=Array.matrix(80,80,null);//for troubleshooting control
+var lvl_gen=new lvlgen();
+var lvl_town=new Lvl1Town();
+var lvl1_Sounds=[];
+var death;
+var Health=new HUDBar(MainHero.HealthPoints,156,480,43);
+var ManaPoints=new HUDBar(MainHero.ManaPoints,524,480,43);
+var Menu=[];
+var Menu_Sounds=[];
+var merge=[];
+var HUD=[];
+var HUD_Sounds=[];
+var townsmen=[];
+var townsmen_sounds=[];
+var enemies=[];
+//Enemies Type sound
+var Zombie_Sounds=[];
+var Fallen_Spr_Sounds=[];
+var Fallen_Swd_Sounds=[];
+var GoatMan_Sounds=[];
+var seklAxe_sounds=[];
+var seklSwd_sounds=[];
+//Enemies type sound
+var Main_Character=[];
+var Main_Hero=[];
+var Main_Hero_Sounds=[];
+var items=[];
+
+//Lvl Variables
+
+//Menu Object Global Resource
+var timer=new Timer();
+var Pent_Spin=new Sprite(wAssets,48,48,0,216,8,2,0.05);
+var Pent_Spin_Show=false;
+var Diablo_Logo=new Sprite(wAssets,550,216,-5,0,15,1,0.2);
+Diablo_Logo.setPosition(wcanvas.width / 2-270,0);
+//Menu Object Global Resource
+//HUD Object
+var Universal_Show=false;
+var Characters_Identity='';
+
+//HUD Object
+var ObjectEnemyandAllied;
+var terrainObstructObject;
+var AI_ObjectEnemyandAllied;
+var AI_terrainObstructObject;
+//Lvl Variables
+//Hero Sprite prototype
+
+//Hero Sprite prototype
+var Level1BuildingOffset={midbuildingYoffset:385,PotionShopXoffset:1168,MerchantXoffset:1688,GraveYardXoffset:1072,GraveYardYoffset:436,OutskirtCaveYoffset:786,rockXoffset:2618};
+
+//var MainChar=new MainHero();
+var gridatrX;
+var gridatrY;
+var Global_Interact={x:0,y:0};
+var Global_MouseMove={x:0,y:0};
+var mousecol;
+var mouserow;
+var scroll={x:-1250,y:2375};//scrolling spawn at town -x:-1250,y:2375
+//enemies-x:1000;y:950
+var mainGrid={row:null,y:null};
+var interactionDebounce=false;
+var ClickHit=false;
+var UserWalk=false;
+
+
+var tilePositionX;//global tile position
+var tilePositionY;
+var globalrow=0;
+var globalcol=0;
+//Volume Control
+
+var Music_Volume=0.4;
+var SFX_Volume=1.0;
+var sound_increment=0.1;
+//Clear function
+function clear(){
+
+
+if((~~(tilePositionX+772)>=(-601))&&(~~(tilePositionX-772)<=wcanvas.width) && (~~(tilePositionY+772)>=-629)&&(~~(tilePositionY-672)<=wcanvas.height)){
+death_ctx.clearRect(0,0,wcanvas.width,wcanvas.height);
+
+}
+w.clearRect(0,0,wcanvas.width,wcanvas.height);
+wAssets.clearRect(0,0,wcanvas.width,wcanvas.height);
+
+}
+//Loading screen
+function Load_Assets(Assets,loaded,full){
+clear();
+wAssets.drawImage(Menu[0],0,100,720,520);
+	wAssets.save();
+			 wAssets.beginPath();
+				     wAssets.font = '30px DIABLO';
+      wAssets.textAlign = 'center';
+      wAssets.fillStyle = 'GOLD';
+		   wAssets.fillText('Loading: '+Assets+' of '+loaded+'/'+full , wcanvas.width / 2, wcanvas.height / 2);
+	
+      wAssets.restore();
+//Pent_Spin.setPosition(wcanvas.width/2,wcanvas.height/2);
+//Pent_Spin.animate(Menu[1],timer);
+
+}
+function Load_Menu_Sprites(Assets,loaded,full){
+clear();
+
+	wAssets.save();
+			 wAssets.beginPath();
+				     wAssets.font = '30px DIABLO';
+      wAssets.textAlign = 'center';
+      wAssets.fillStyle = 'GOLD';
+		   wAssets.fillText('Loading: '+Assets+' of '+loaded+'/'+full , wcanvas.width / 2, wcanvas.height / 2);
+	
+      wAssets.restore();
+//Pent_Spin.setPosition(wcanvas.width/2,wcanvas.height/2);
+//Pent_Spin.animate(Menu[1],timer);
+
+}
+
+
+//Loading screen 
+
+function Music_fx_options(){
+if(Menu_Sounds.length!=0){
+if(Menu_Sounds[0].readyState)
+{
+Menu_Sounds[0].volume=Music_Volume;
+//alert(Menu_Sounds.length);
+}
+}
+if(lvl1_Sounds.length!=0){
+for(var i in lvl1_Sounds){//draw 
+lvl1_Sounds[i].volume=Music_Volume;
+}
+
+
+}
+
+
+}
+function SFX_options(i){
+if(Menu_Sounds.length!=0){
+if(Menu_Sounds[1].readyState)
+{
+Menu_Sounds[1].volume=SFX_Volume;
+//alert(Menu_Sounds.length);
+}
+if(Menu_Sounds[2].readyState)
+{
+Menu_Sounds[2].volume=SFX_Volume;
+//alert(Menu_Sounds.length);
+}
+
+}
+if(HUD_Sounds.length!=0){
+if(i<HUD_Sounds.length){
+if(HUD_Sounds[i].readyState){
+HUD_Sounds[i].volume=SFX_Volume;
+}
+}
+
+
+
+}
+
+if(Main_Hero_Sounds.length!=0){
+
+if(i<Main_Hero_Sounds.length){
+if(Main_Hero_Sounds[i].readyState){
+Main_Hero_Sounds[i].volume=SFX_Volume;
+}
+
+}
+
+
+}
+if(townsmen_sounds.length!=0){
+
+if(i<townsmen_sounds.length){
+if(townsmen_sounds[i].readyState){
+townsmen_sounds[i].volume=SFX_Volume;
+}
+}
+
+
+
+}
+
+
+
+if(i<GameWorld.worldEntities.length){
+
+if(GameWorld.worldEntities[i].enemy==true)
+{for(var e in GameWorld.worldEntities[i].sounds){
+if(GameWorld.worldEntities[i].sounds[e].readyState)
+GameWorld.worldEntities[i].sounds[e].volume=SFX_Volume;
+}
+
+
+}
+}
+
+}
+
+
+function Level_Changing()
+{
+
+ObjectEnemyandAllied=lvl_gen.ObjectEnemyandAllied;
+terrainObstructObject=lvl_gen.terrainObstructObject;
+AI_ObjectEnemyandAllied=lvl_gen.ObjectEnemyandAllied;
+AI_terrainObstructObject=lvl_gen.terrainObstructObject;
+}
+function Level_Update(){
+
+lvl_gen.ObjectEnemyandAllied=ObjectEnemyandAllied;
+lvl_gen.terrainObstructObject=terrainObstructObject;
+lvl_gen.ObjectEnemyandAllied=AI_ObjectEnemyandAllied;
+lvl_gen.terrainObstructObject=AI_terrainObstructObject;
+
+}
+
+
+
+function ActiveEntities()
+{
+this.characterEntities=[];
+this.EnemyEntities=[];
+this.worldEntities=[];
+this.heroDepthSwap=false;
+}
+
+ActiveEntities.prototype.addEntities=function(entity){
+this.worldEntities.push(entity);
+
+}
+ActiveEntities.prototype.addMovingEntities=function(entity){
+
+this.characterEntities.push(entity);
+}
+
+ActiveEntities.prototype.DepthMovingEntities=function(){//field sorting on Moving Entities
+
+this.characterEntities.sort(function (obj1,obj2){
+
+return obj1.sizex-obj2.sizex;
+
+});
+
+
+this.characterEntities.sort(function (obj1,obj2){
+
+return obj1.sizey-obj2.sizey;
+
+});
+
+
+
+}
+ActiveEntities.prototype.updateMovingEntities=function(){
+
+
+
+for(var i in this.characterEntities){//draw 
+this.characterEntities[i].update();
+
+
+}
+for(var i=this.characterEntities.length-1;i>=0;--i){//recycle entity,decrement will avoid flickr when entities being destroy
+if(this.characterEntities[i].removeFromWorld){//if removeFromWorld is true
+this.characterEntities.splice(i,1);//remove the array if destroy
+
+}
+
+}
+
+}
+
+
+
+
+ActiveEntities.prototype.UnifiedupdateDestruction=function(dig1){
+if(dig1<this.worldEntities.length){
+
+var iterate=-Math.abs(dig1)+this.worldEntities.length-1;
+
+
+if(this.worldEntities[iterate].removeFromWorld){//if removeFromWorld is true
+
+this.worldEntities.splice(iterate,1);
+}
+
+}
+}
+ActiveEntities.prototype.Unifiedupdate=function(dig1){
+
+
+
+if(dig1<this.worldEntities.length){
+
+this.worldEntities[dig1].update();
+}
+
+
+
+}
+ActiveEntities.prototype.UnifiedDraw=function(dig1){
+
+
+
+if(dig1<this.worldEntities.length){
+
+this.worldEntities[dig1].draw();
+}
+
+
+}
+ActiveEntities.prototype.UnifiedDepth=function(logic){
+if(logic){
+
+this.worldEntities.sort(function (obj1,obj2){
+
+return obj1.sizex-obj2.sizex;
+
+});
+
+
+this.worldEntities.sort(function (obj1,obj2){
+
+return obj1.sizey-obj2.sizey;
+
+});
+
+
+}
+
+
+
+}
+
+ActiveEntities.prototype.draw=function(){
+
+for(var i in this.worldEntities){//draw 
+this.worldEntities[i].draw();
+}
+
+
+}
+ActiveEntities.prototype.DeptWorldEntities=function(){//field sorting on world entities
+
+this.worldEntities.sort(function (obj1,obj2){
+
+return obj1.sizex-obj2.sizex;
+
+});
+
+
+this.worldEntities.sort(function (obj1,obj2){
+
+return obj1.sizey-obj2.sizey;
+
+});
+
+
+
+}
+ActiveEntities.prototype.WorldLevel=function(row,col){
+
+ var currentcolrow=calcISO(row,col,50);
+tilePositionX=currentcolrow.x;
+tilePositionY=currentcolrow.y;
+if((~~(tilePositionX)>=(-tilewidth))&&(~~(tilePositionX)<=wcanvas.width) && (~~(tilePositionY)>=-tileheight)&&(~~(tilePositionY)<=wcanvas.height-100)){//draw on canvas screen only 
+
+if(tileMap[row][col]!=null)
+{
+//w.drawImage(rend_texture_map[5],Math.round(tilePositionX),Math.round(tilePositionY),rend_texture_map[1].width,rend_texture_map[1].height);//draw if got value of 1 
+}
+else{//terrain generation
+switch(MainHero.Current_Level){
+case 1:
+lvl_town.terraintown(row,col);//Level Town and outskirt
+death.Draw_Death(death_ctx,enemies,Main_Hero,row,col);//death, always at final
+break;
+case 2:break;
+case 3:break;
+case 4:break;
+default:console.log('invalid level');
+
+
+}
+
+}
+
+}
+
+
+}
+var GameWorld;
+
+function calcISO(row,col,tileHeight){
+var tilePositionXa=(row-col)*tileHeight;//col here stats the starting position of tiling in descending orders, row is the increasing number of sliding tiles! xiso=(x-y)
+tilePositionXa += (wcanvas.width/2)-(tileHeight/2);//center the grid horizontally,yiso=(x+y)/2
+var tilePositionYa=(row+col)*(tileHeight/2);
+tilePositionXa -= scroll.x;//refer to the current scroll position
+tilePositionYa -= scroll.y;
+
+return {x:tilePositionXa,y:tilePositionYa};
+}
+window.onload= function(){
+for(var i in json.Menu){
+Menu_MANAGER.queueDownload(json.Menu[i]);
+}
+Menu_MANAGER.downloadAll(function(){
+for(var i in json.Menu){
+Menu[i]=Menu_MANAGER.getAsset(json.Menu[i]);
+Load_Menu_Sprites('Menu_Sprite',i+1,json.Menu.length);
+}
+
+});
+
+for(var i in json.Menu_Sounds){
+Sound_MANAGER.queueDownload(json.Menu_Sounds[i]);
+}
+for(var i in json.Level1_Sounds){
+Sound_MANAGER.queueDownload(json.Level1_Sounds[i]);
+}
+//HUD_Sounds
+for(var i in json.HUD_Sounds){
+Sound_MANAGER.queueDownload(json.HUD_Sounds[i]);
+}
+
+//Main_Hero_Sounds
+for(var i in json.MainHero_Sounds){
+Sound_MANAGER.queueDownload(json.MainHero_Sounds[i]);
+}
+//townsmen_sounds
+for(var i in json.townsmen_sounds){
+Sound_MANAGER.queueDownload(json.townsmen_sounds[i]);
+}
+//Zombie Sounds
+for(var i in json.Zombie_sounds){
+Sound_MANAGER.queueDownload(json.Zombie_sounds[i]);
+}
+//Fallen_Spr_Sounds
+for(var i in json.Fallen_Spr_sounds){
+Sound_MANAGER.queueDownload(json.Fallen_Spr_sounds[i]);
+}
+//Fallen_Swd_Sounds
+for(var i in json.Fallen_Swd_sounds){
+Sound_MANAGER.queueDownload(json.Fallen_Swd_sounds[i]);
+}
+//GoatMan_Sounds
+for(var i in json.GoatMan_sounds){
+Sound_MANAGER.queueDownload(json.GoatMan_sounds[i]);
+}
+//seklAxe_sounds
+for(var i in json.seklAxe_sounds){
+Sound_MANAGER.queueDownload(json.seklAxe_sounds[i]);
+}
+//seklSwd_sounds
+for(var i in json.seklSwd_sounds){
+Sound_MANAGER.queueDownload(json.seklSwd_sounds[i]);
+}
+Sound_MANAGER.downloadAll(function(){
+for(var i in json.Menu_Sounds){
+Menu_Sounds[i]=Sound_MANAGER.getAsset(json.Menu_Sounds[i]);
+Load_Assets('Menu Sounds',i+1,json.Menu_Sounds.length);
+
+}
+for(var i in json.Level1_Sounds){
+lvl1_Sounds[i]=Sound_MANAGER.getAsset(json.Level1_Sounds[i]);
+Load_Assets('Lvl Sounds',i+1,json.Level1_Sounds.length);
+
+}
+for(var i in json.HUD_Sounds){
+HUD_Sounds[i]=Sound_MANAGER.getAsset(json.HUD_Sounds[i]);
+Load_Assets('HUD Sounds',i+1,json.HUD_Sounds.length);
+
+}
+for(var i in json.MainHero_Sounds){
+Main_Hero_Sounds[i]=Sound_MANAGER.getAsset(json.MainHero_Sounds[i]);
+Load_Assets('Hero Sounds',i+1,json.MainHero_Sounds.length);
+
+}
+for(var i in json.townsmen_sounds){
+townsmen_sounds[i]=Sound_MANAGER.getAsset(json.townsmen_sounds[i]);
+Load_Assets('Town Folks Sounds',i+1,json.townsmen_sounds.length);
+
+}
+for(var i in json.Zombie_sounds){
+Zombie_Sounds[i]=Sound_MANAGER.getAsset(json.Zombie_sounds[i]);
+Load_Assets('Zombie Sounds',i+1,json.Zombie_sounds.length);
+
+}
+for(var i in json.Fallen_Spr_sounds){
+Fallen_Spr_Sounds[i]=Sound_MANAGER.getAsset(json.Fallen_Spr_sounds[i]);
+
+Load_Assets('Fallen_Spr_Sounds',i+1,json.Fallen_Spr_sounds.length);
+
+}
+for(var i in json.Fallen_Swd_sounds){
+Fallen_Swd_Sounds[i]=Sound_MANAGER.getAsset(json.Fallen_Swd_sounds[i]);
+Load_Assets('Fallen_Swd_Sounds',i+1,json.Fallen_Swd_sounds.length);
+}
+for(var i in json.GoatMan_sounds){
+GoatMan_Sounds[i]=Sound_MANAGER.getAsset(json.GoatMan_sounds[i]);
+Load_Assets('GoatMan_Sounds',i+1,json.GoatMan_sounds.length);
+}
+for(var i in json.seklAxe_sounds){
+seklAxe_sounds[i]=Sound_MANAGER.getAsset(json.seklAxe_sounds[i]);
+Load_Assets('seklAxe_sounds',i+1,json.seklAxe_sounds.length);
+}
+for(var i in json.seklSwd_sounds){
+seklSwd_sounds[i]=Sound_MANAGER.getAsset(json.seklSwd_sounds[i]);
+Load_Assets('seklSwd_sounds',i+1,json.seklSwd_sounds.length);
+}
+
+//Menu_Sounds[0].currentTime=0;
+//Menu_Sounds[0].loop=true;
+//Menu_Sounds[0].play();
+});
+
+
+function draw(world_grid){
+//var atri=0;
+var TileXa1;
+var TileXa2;
+var depth=true;
+var i=0;
+//var detectDestory=true;
+//var generator=0;
+//GameWorld.update();
+//GameWorld.DeptWorldEntities();
+//
+for(var showcol=0;showcol<world_grid/2;showcol++)
+{//generator++;
+if(showcol<MainHero.Potion_Caps.length){
+	localStorage.setItem('Potion_Caps'+[showcol],MainHero.Potion_Caps[showcol]);
+}
+for(var showrow=0;showrow<world_grid/2;showrow++)
+{
+SFX_options(i);
+
+//Level_Update();//Bug fix for terrain offset
+//Level_Changing();
+TileXa1=[(scroll.x/0.85)-((wcanvas.width)/2+scroll.x/0.55)+((wcanvas.height)/2+scroll.x/0.55)]/50+(scroll.y/30);
+//retro conversion of scroll.x and scroll.y to row
+globalrow=(TileXa1/4+TileXa1/6+TileXa1/8)+showrow-10-TileXa1/40-TileXa1/50;
+//during row conversion,TileXa is divided in even binomial sequence to reduce the broken texture on lower section of map rendering, showrow is to iterate the following row. -10 is the offset to cover broken texture on lower section
+globalcol=(scroll.y/(30-globalrow/25))+showcol-globalrow/1.4-globalrow/20-10-TileXa1/30-TileXa1/30;
+//during col conversion, the -row/1.4,-row/20 is to reduce uppersection broken texture rendering
+globalrow=(globalrow>=world_grid-1)?world_grid-1:globalrow;
+globalrow=(globalrow<=0)?0:globalrow;
+globalcol=(globalcol>=world_grid-1)?world_grid-1:globalcol;
+globalcol=(globalcol<=0)?0:globalcol;
+
+GameWorld.WorldLevel(~~(globalrow),~~(globalcol));//levelling system will apply here
+//detectDestory=false;
+if(HUDBar.status!='Main_Menu')
+{if(HUDBar.status!='TRAP'){
+GameWorld.Unifiedupdate(i);
+GameWorld.UnifiedupdateDestruction(i);
+GameWorld.UnifiedDepth(depth);
+GameWorld.UnifiedDraw(i);
+depth=false;}
+}
+//
+i++;
+}
+
+
+}
+//GameWorld.draw();
+}
+
+
+
+function handleKeyDown(event){
+/*
+switch(event.keyCode){
+case Keys.UP:
+scroll.y-=((scroll.y-atrviewer)>=-tilewidth*5)?atrviewer:0;//scrolling point limit to (0,0), if less than 0 false return 0
+//atr=true;
+screen.up=true;
+//draw();
+event.preventDefault();
+break;
+case Keys.DOWN:
+scroll.y+= ((scroll.y+atrviewer) >= (grid.height*tileheight) )?0:atrviewer;//down in canvas means y++ no limit for this program
+//atr=true;
+screen.down=true;
+//draw();
+event.preventDefault();
+break;
+case Keys.LEFT:
+scroll.x-=((scroll.x-atrviewer)>=-tilewidth*40)?atrviewer:0;//same applies scrolling limits
+//atr=true;
+screen.left=true;
+//draw();
+event.preventDefault();
+break;
+case Keys.RIGHT:
+scroll.x+=((scroll.x+atrviewer)>=(grid.width*tileheight))?0:atrviewer;
+//screen.right=true;
+//draw();
+event.preventDefault();
+break;
+}*/
+ for(var i=0;i<MainHero.Potion_Caps.length;i++){//Potion HUD
+switch(event.keyCode){
+case Potion_Keys.One:
+	if(MainHero.Potion_Caps[0]!='e'){
+ 	 if(MainHero.Potion_Caps[i]=='h')
+	 {
+		//wAssets.drawImage(items[0],238+(i*32)-i,461,28,28);
+	if(HUD_Sounds[0].readyState)
+{
+HUD_Sounds[0].currentTime=0; 
+HUD_Sounds[0].play();
+//alert(Menu_Sounds.length);
+}
+	 
+	 MainHero.HealthPoints=(MainHero.HealthPoints+2>=MainHero.MaxHealthPoints)?MainHero.MaxHealthPoints:MainHero.HealthPoints+2;
+	MainHero.Potion_Caps[0]='e';
+
+
+	 }
+	 	else if(MainHero.Potion_Caps[i]=='L')
+	 {
+	//wAssets.drawImage(items[0],238+(i*32)-i,461,28,28);
+	if(HUD_Sounds[0].readyState)
+{
+HUD_Sounds[0].currentTime=0; 
+HUD_Sounds[0].play();
+//alert(Menu_Sounds.length);
+}
+	
+	 MainHero.HealthPoints=(MainHero.HealthPoints+4>=MainHero.MaxHealthPoints)?MainHero.MaxHealthPoints:MainHero.HealthPoints+4;
+	MainHero.Potion_Caps[0]='e';
+	 }}
+event.preventDefault();
+break;
+case Potion_Keys.Two:
+if(MainHero.Potion_Caps[1]!='e'){
+ if(MainHero.Potion_Caps[i]=='h')
+	 {
+		//wAssets.drawImage(items[0],238+(i*32)-i,461,28,28);
+	
+	 if(HUD_Sounds[0].readyState)
+{
+HUD_Sounds[0].currentTime=0; 
+HUD_Sounds[0].play();
+//alert(Menu_Sounds.length);
+}
+	 MainHero.HealthPoints=(MainHero.HealthPoints+2>=MainHero.MaxHealthPoints)?MainHero.MaxHealthPoints:MainHero.HealthPoints+2;
+	MainHero.Potion_Caps[1]='e';
+
+
+	 }
+	 	else if(MainHero.Potion_Caps[i]=='L')
+	 {
+	//wAssets.drawImage(items[0],238+(i*32)-i,461,28,28);
+	if(HUD_Sounds[0].readyState)
+{
+HUD_Sounds[0].currentTime=0; 
+HUD_Sounds[0].play();
+//alert(Menu_Sounds.length);
+}
+	 MainHero.HealthPoints=(MainHero.HealthPoints+4>=MainHero.MaxHealthPoints)?MainHero.MaxHealthPoints:MainHero.HealthPoints+4;
+	MainHero.Potion_Caps[1]='e';
+	 }
+}
+event.preventDefault();
+break;
+case Potion_Keys.Three:
+if(MainHero.Potion_Caps[2]!='e'){
+ if(MainHero.Potion_Caps[i]=='h')
+	 {
+		//wAssets.drawImage(items[0],238+(i*32)-i,461,28,28);
+	
+	 if(HUD_Sounds[0].readyState)
+{
+HUD_Sounds[0].currentTime=0; 
+HUD_Sounds[0].play();
+//alert(Menu_Sounds.length);
+}
+	 MainHero.HealthPoints=(MainHero.HealthPoints+2>=MainHero.MaxHealthPoints)?MainHero.MaxHealthPoints:MainHero.HealthPoints+2;
+	MainHero.Potion_Caps[2]='e';
+
+
+	 }
+	 	else if(MainHero.Potion_Caps[i]=='L')
+	 {
+	//wAssets.drawImage(items[0],238+(i*32)-i,461,28,28);
+	if(HUD_Sounds[0].readyState)
+{
+HUD_Sounds[0].currentTime=0; 
+HUD_Sounds[0].play();
+//alert(Menu_Sounds.length);
+}
+	 MainHero.HealthPoints=(MainHero.HealthPoints+4>=MainHero.MaxHealthPoints)?MainHero.MaxHealthPoints:MainHero.HealthPoints+4;
+	MainHero.Potion_Caps[2]='e';
+	 }}
+event.preventDefault();
+break;
+case Potion_Keys.Four:
+if(MainHero.Potion_Caps[3]!='e'){
+ if(MainHero.Potion_Caps[i]=='h')
+	 {
+		//wAssets.drawImage(items[0],238+(i*32)-i,461,28,28);
+	if(HUD_Sounds[0].readyState)
+{
+HUD_Sounds[0].currentTime=0; 
+HUD_Sounds[0].play();
+//alert(Menu_Sounds.length);
+}
+	 
+	 MainHero.HealthPoints=(MainHero.HealthPoints+2>=MainHero.MaxHealthPoints)?MainHero.MaxHealthPoints:MainHero.HealthPoints+2;
+	MainHero.Potion_Caps[3]='e';
+
+
+	 }
+	 	else if(MainHero.Potion_Caps[i]=='L')
+	 {
+	//wAssets.drawImage(items[0],238+(i*32)-i,461,28,28);
+	if(HUD_Sounds[0].readyState)
+{
+HUD_Sounds[0].currentTime=0; 
+HUD_Sounds[0].play();
+//alert(Menu_Sounds.length);
+}
+	 MainHero.HealthPoints=(MainHero.HealthPoints+4>=MainHero.MaxHealthPoints)?MainHero.MaxHealthPoints:MainHero.HealthPoints+4;
+	MainHero.Potion_Caps[3]='e';
+	 }}
+event.preventDefault();
+break;
+case Potion_Keys.Five:
+if(MainHero.Potion_Caps[4]!='e'){
+ if(MainHero.Potion_Caps[i]=='h')
+	 {
+		//wAssets.drawImage(items[0],238+(i*32)-i,461,28,28);
+	if(HUD_Sounds[0].readyState)
+{
+HUD_Sounds[0].currentTime=0; 
+HUD_Sounds[0].play();
+//alert(Menu_Sounds.length);
+}
+	 
+	 MainHero.HealthPoints=(MainHero.HealthPoints+2>=MainHero.MaxHealthPoints)?MainHero.MaxHealthPoints:MainHero.HealthPoints+2;
+	MainHero.Potion_Caps[4]='e';
+
+
+	 }
+	 	else if(MainHero.Potion_Caps[i]=='L')
+	 {
+	//wAssets.drawImage(items[0],238+(i*32)-i,461,28,28);
+	if(HUD_Sounds[0].readyState)
+{
+HUD_Sounds[0].currentTime=0; 
+HUD_Sounds[0].play();
+//alert(Menu_Sounds.length);
+}
+	
+	 MainHero.HealthPoints=(MainHero.HealthPoints+4>=MainHero.MaxHealthPoints)?MainHero.MaxHealthPoints:MainHero.HealthPoints+4;
+	MainHero.Potion_Caps[4]='e';
+	 }}
+event.preventDefault();
+break;
+case Potion_Keys.Six:
+if(MainHero.Potion_Caps[5]!='e'){
+ if(MainHero.Potion_Caps[i]=='h')
+	 {
+		//wAssets.drawImage(items[0],238+(i*32)-i,461,28,28);
+	if(HUD_Sounds[0].readyState)
+{
+HUD_Sounds[0].currentTime=0; 
+HUD_Sounds[0].play();
+//alert(Menu_Sounds.length);
+}
+	 
+	 MainHero.HealthPoints=(MainHero.HealthPoints+2>=MainHero.MaxHealthPoints)?MainHero.MaxHealthPoints:MainHero.HealthPoints+2;
+	MainHero.Potion_Caps[5]='e';
+
+
+	 }
+	 	else if(MainHero.Potion_Caps[i]=='L')
+	 {
+	//wAssets.drawImage(items[0],238+(i*32)-i,461,28,28);
+	if(HUD_Sounds[0].readyState)
+{
+HUD_Sounds[0].currentTime=0; 
+HUD_Sounds[0].play();
+//alert(Menu_Sounds.length);
+}
+	 MainHero.HealthPoints=(MainHero.HealthPoints+4>=MainHero.MaxHealthPoints)?MainHero.MaxHealthPoints:MainHero.HealthPoints+4;
+	MainHero.Potion_Caps[5]='e';
+	 }}
+event.preventDefault();
+break;
+case Potion_Keys.Seven:
+if(MainHero.Potion_Caps[6]!='e'){
+ if(MainHero.Potion_Caps[i]=='h')
+	 {
+		//wAssets.drawImage(items[0],238+(i*32)-i,461,28,28);
+	if(HUD_Sounds[0].readyState)
+{
+HUD_Sounds[0].currentTime=0; 
+HUD_Sounds[0].play();
+//alert(Menu_Sounds.length);
+}
+	 
+	 MainHero.HealthPoints=(MainHero.HealthPoints+2>=MainHero.MaxHealthPoints)?MainHero.MaxHealthPoints:MainHero.HealthPoints+2;
+	MainHero.Potion_Caps[6]='e';
+
+
+	 }
+	 	else if(MainHero.Potion_Caps[i]=='L')
+	 {
+	//wAssets.drawImage(items[0],238+(i*32)-i,461,28,28);
+	if(HUD_Sounds[0].readyState)
+{
+HUD_Sounds[0].currentTime=0; 
+HUD_Sounds[0].play();
+//alert(Menu_Sounds.length);
+}
+	 MainHero.HealthPoints=(MainHero.HealthPoints+4>=MainHero.MaxHealthPoints)?MainHero.MaxHealthPoints:MainHero.HealthPoints+4;
+	MainHero.Potion_Caps[6]='e';
+	 }}
+event.preventDefault();
+break;
+case Potion_Keys.Eight:
+if(MainHero.Potion_Caps[7]!='e'){
+ if(MainHero.Potion_Caps[i]=='h')
+	 {
+		//wAssets.drawImage(items[0],238+(i*32)-i,461,28,28);
+	if(HUD_Sounds[0].readyState)
+{
+HUD_Sounds[0].currentTime=0; 
+HUD_Sounds[0].play();
+//alert(Menu_Sounds.length);
+}
+	 
+	 MainHero.HealthPoints=(MainHero.HealthPoints+2>=MainHero.MaxHealthPoints)?MainHero.MaxHealthPoints:MainHero.HealthPoints+2;
+	MainHero.Potion_Caps[7]='e';
+
+
+	 }
+	 	else if(MainHero.Potion_Caps[i]=='L')
+	 {
+	//wAssets.drawImage(items[0],238+(i*32)-i,461,28,28);
+	if(HUD_Sounds[0].readyState)
+{
+HUD_Sounds[0].currentTime=0; 
+HUD_Sounds[0].play();
+//alert(Menu_Sounds.length);
+}
+	 MainHero.HealthPoints=(MainHero.HealthPoints+4>=MainHero.MaxHealthPoints)?MainHero.MaxHealthPoints:MainHero.HealthPoints+4;
+	MainHero.Potion_Caps[7]='e';
+	 }}
+event.preventDefault();
+break;
+}
+ 
+ 
+ }
+//var Potion_Keys={One:49,Two:50,Three:51,Four:52,Five:53,Six:54,Seven:55,Eight:56};
+
+
+}
+function handleMouseDown(e){
+if(HUDBar.status!='Main_Menu'){//Exit_to_Menu Game Paused
+if(HUDBar.status!='TRAP'){
+if(!MainHero.Dead&&!TownsMen_Conversation){
+var gridOffsetY=15;//the no. of grid height
+var gridOffsetX=15;//offset within grid
+gridOffsetX+=(guiCanvas.width/2)-(tilewidth/2)-scroll.x;//take into account the offset on the X axis caused,by centering the grid horizontally
+mousecol=(((e.clientY-guiCanvas.getBoundingClientRect().top)-(tilewidth/grid.width)+scroll.y)*2);//this part states the begining tiling position of X-axis plane, (yiso-y)*2=xiso
+mousecol=((gridOffsetX+mousecol)-(e.clientX-guiCanvas.getBoundingClientRect().left))/2;//X-axis plane, the reference column plus the gridOffsetX starts of center then - e.clientX divides 2 correponds the column
+mouserow =(((e.clientX-guiCanvas.getBoundingClientRect().left)+mousecol)-tileheight)-gridOffsetX;//the Y axis plane, the cursor position plus the column minus off the tile height then center it gridOffsetX
+mouserow = Math.round(mouserow/tileheight);//click coordinate to tile coordinate
+mousecol=Math.round(mousecol/tileheight);
+console.log(mouserow + ' ,  '+ mousecol);
+if(mouserow>=0 && mousecol>=0 &&mouserow<grid.width && mousecol<grid.height){
+if(e.clientY-guiCanvas.getBoundingClientRect().top<440){//Use for HUD interface
+//tileMap[row]=(tileMap[row] ===undefined)?[]:tileMap[row];//if undefined assigned another array becomes second dimension else tilemap[row]
+//tileMap[mouserow][mousecol]=1;
+
+mainGrid.row=mouserow;
+mainGrid.col=mousecol;
+if(!Enemy.Enemy_Locked){
+MainHero.vGridRow=mouserow;
+MainHero.vGridCol=mousecol;}
+interactionDebounce=true;
+ClickHit=true;
+//UserWalk=true;
+//atr=true;
+}
+}}}}
+var x = e.clientX-guiCanvas.getBoundingClientRect().left;//origin of mouse now center to earth
+var y = e.clientY-guiCanvas.getBoundingClientRect().top;
+TownsMen_ConverLoop(x,y);
+return {x:x,y:y};
+
+}
+//Menu Mouse function
+function Menu_MouseDown(e){
+var y=e.clientY-guiCanvas.getBoundingClientRect().top;
+var x=e.clientX-guiCanvas.getBoundingClientRect().left;
+
+if((y>=465&&y<=535)&&(x>100&&x<580)){//Begin Game
+  //wAssets.rect(100,480,520,70);//no weapon
+  
+Game_Ready=true;
+if(Menu_Sounds.length!=0){
+if(Menu_Sounds[1].readyState)
+{
+Menu_Sounds[1].currentTime=0; 
+Menu_Sounds[1].play();
+//alert(Menu_Sounds.length);
+}
+
+}
+}
+}
+function Menu_MouseMove(e){
+var y=e.clientY-guiCanvas.getBoundingClientRect().top;
+var x=e.clientX-guiCanvas.getBoundingClientRect().left;
+if((y>=465&&y<=535)&&(x>100&&x<580)){//Begin Game
+  //wAssets.rect(100,480,520,70);//no weapon
+  if(Menu_Sounds.length!=0){
+if(Menu_Sounds[2].readyState)
+{
+if(!Menu_Sounds[2].ended)
+{Menu_Sounds[2].play();}
+//alert(Menu_Sounds.length);
+}
+}
+  Pent_Spin.setPosition(35,450);
+Pent_Spin_Show=true;
+}
+else {
+  if(Menu_Sounds.length!=0){
+if(Menu_Sounds[2].readyState)
+{
+{Menu_Sounds[2].currentTime=0;}
+//alert(Menu_Sounds.length);
+}
+}
+
+Pent_Spin_Show=false;}
+}
+//Menu Mouse function
+function HUD_MouseDown(e){
+var y=e.clientY-guiCanvas.getBoundingClientRect().top;
+var x=e.clientX-guiCanvas.getBoundingClientRect().left;
+if(HUDBar.status!='Main_Menu'){
+if((y>=462&&y<=480)&&(x>25&&x<105)){//Char Menu
+HUDBar.status='Char';
+}
+else if((y>=482&&y<=505)&&(x>25&&x<105)){//Quest Menu
+HUDBar.status='Quest';
+}
+else if((y>=522&&y<=540)&&(x>25&&x<105)){//Map Menu
+HUDBar.status='Map';
+}
+else if((y>=546&&y<=567)&&(x>25&&x<105)){//Main Menu
+HUDBar.status='Main_Menu';
+if(Menu_Sounds.length!=0){
+if(Menu_Sounds[1].readyState)
+{
+Menu_Sounds[1].currentTime=0; 
+Menu_Sounds[1].play();
+//alert(Menu_Sounds.length);
+}
+
+}
+}
+else if((y>=462&&y<=480)&&(x>612&&x<694)){//Inventory Menu
+HUDBar.status='Inv';
+}
+else if((y>=482&&y<=505)&&(x>612&&x<694)){//Spells Menu
+HUDBar.status='Spells';
+}
+else if(HUDBar.status=='Inv'){
+if((y>=497&&y<=497+15)&&(x>=230&&x<=230+105)){//No Weapon
+MainHero.WeaponStates=1;
+}
+else if((y>=497&&y<=497+15)&&(x>=350&&x<=350+45)){//Axe
+	 if(HUD_Sounds.length!=0){
+	 if(HUD_Sounds[2].readyState)
+{
+HUD_Sounds[2].currentTime=0; 
+HUD_Sounds[2].play();
+//alert(Menu_Sounds.length);
+}}
+MainHero.WeaponStates=6;
+}
+else if((y>=513&&y<=513+15)&&(x>=230&&x<=230+65)){//Sword
+	 if(HUD_Sounds.length!=0){
+	 if(HUD_Sounds[1].readyState)
+{
+HUD_Sounds[1].currentTime=0; 
+HUD_Sounds[1].play();
+//alert(Menu_Sounds.length);
+}}
+MainHero.WeaponStates=2;
+}
+else if((y>=513&&y<=513+15)&&(x>=350&&x<=350+165)){//Sword and shield
+	 if(HUD_Sounds.length!=0){
+	 if(HUD_Sounds[4].readyState)
+{
+HUD_Sounds[4].currentTime=0; 
+HUD_Sounds[4].play();
+//alert(Menu_Sounds.length);
+}}
+MainHero.WeaponStates=3;
+}
+else if((y>=528&&y<=528+15)&&(x>=230&&x<=230+55)){//Mace
+	 if(HUD_Sounds.length!=0){
+	 if(HUD_Sounds[1].readyState)
+{
+HUD_Sounds[1].currentTime=0; 
+HUD_Sounds[1].play();
+//alert(Menu_Sounds.length);
+}}
+MainHero.WeaponStates=4;
+}
+else if((y>=528&&y<=528+15)&&(x>=350&&x<=350+155)){//Mace and shield
+	 if(HUD_Sounds.length!=0){
+	 if(HUD_Sounds[4].readyState)
+{
+HUD_Sounds[4].currentTime=0; 
+HUD_Sounds[4].play();
+//alert(Menu_Sounds.length);
+}}
+MainHero.WeaponStates=5;
+}
+else if((y>=543&&y<=543+15)&&(x>=230&&x<=230+60)){//Staff
+	 if(HUD_Sounds.length!=0){
+	 if(HUD_Sounds[3].readyState)
+{
+HUD_Sounds[3].currentTime=0; 
+HUD_Sounds[3].play();
+//alert(Menu_Sounds.length);
+}}
+MainHero.WeaponStates=7;
+}
+}
+if(HUDBar.status=='TRAP')
+{if((y>=wcanvas.height / 2+8&&y<=wcanvas.height / 2+8+22)&&(x>=wcanvas.width / 2-55&&x<=wcanvas.width / 2-55+110))
+{
+if(Menu_Sounds.length!=0){
+if(Menu_Sounds[1].readyState)
+{
+Menu_Sounds[1].currentTime=0; 
+Menu_Sounds[1].play();
+//alert(Menu_Sounds.length);
+}
+
+}
+
+HUDBar.status='DIS';
+Game_Ready=false;
+}
+
+}
+// wAssets.rect(wcanvas.width / 2-55,wcanvas.height / 2+8, 110,22);
+
+if(MainHero.Dead==true)
+{
+
+if((y>=wcanvas.height / 2+10&&y<=wcanvas.height / 2+10+25)&&(x>=wcanvas.width / 2-65&&x<=wcanvas.width / 2-65+130))
+{
+if(Menu_Sounds.length!=0){
+if(Menu_Sounds[1].readyState)
+{
+Menu_Sounds[1].currentTime=0; 
+Menu_Sounds[1].play();
+//alert(Menu_Sounds.length);
+}
+
+}
+Pent_Spin_Show=false;
+HUDBar.status='DIS';
+MainHero.Current_Level=1;
+scroll={x:-1250,y:2375};
+		localStorage.setItem('Health_Points',MainHero.MaxHealthPoints);
+		localStorage.setItem('Gold_Points',5000);
+		localStorage.setItem('Mana_Points',MainHero.MaxManaPoints);
+		localStorage.setItem('Hit_Points',MainHero.HitPoints);
+		localStorage.setItem('WeaponStates',2);
+		localStorage.setItem('scrollx',-1250);
+		localStorage.setItem('scrolly',2375);
+		localStorage.setItem('Current_Level',1);
+		MainHero.MaxHealthPoints=5;
+		MainHero.HealthPoints=MainHero.MaxHealthPoints;
+		MainHero.ManaPoints=MainHero.MaxManaPoints;
+		MainHero.HitPoints=1;
+		MainHero.GoldPoints=5000;
+		MainHero.WeaponStates=2;
+		MainHero.Potion_Caps=Array.matrix(8,1,'e');
+mainGrid={row:null,y:null};//Object Reconstruction error fix
+MainHero.RealTimeGridPos={row:null,col:null};
+MainHero.vGridRow=null;
+MainHero.vGridCol=null;
+
+/*
+GameWorld.addEntities(new MainHero(Main_Hero,wAssets,wcanvas,false));
+for( var i in GameWorld.worldEntities){
+if(GameWorld.worldEntities[i].hero==true){
+mainGrid.row=GameWorld.worldEntities[i].herorow;
+mainGrid.col=GameWorld.worldEntities[i].herocol;
+MainHero.vGridRow=GameWorld.worldEntities[i].herorow;
+MainHero.vGridCol=GameWorld.worldEntities[i].herocol;
+}
+}*/
+MainHero.Shielded=false;
+MainHero.Blocked=false;
+MainHero.Block_Anim=false;
+MainHero.Hero_Attacked=false;
+Enemy.Hurt_Row=null;
+Enemy.Hurt_Col=null;
+Enemy.Enemy_Locked=false;
+Game_Mode=false;
+Play=false;
+MainHero.Dead=false;
+	
+//alert(MainHero.WeaponStates);
+}
+
+}
+
+
+//     wAssets.rect(wcanvas.width / 2-65,wcanvas.height / 2+10, 130,25);//no weapon
+
+}
+else if(HUDBar.status=='Main_Menu'){
+if((y>=wcanvas.height / 2+10&&y<=wcanvas.height / 2+10+20)&&(x>=wcanvas.width / 2-68&&x<=wcanvas.width / 2-68+50)){//Exit Menu
+HUDBar.status='TRAP';
+if(Menu_Sounds.length!=0){
+if(Menu_Sounds[1].readyState)
+{
+Menu_Sounds[1].currentTime=0; 
+Menu_Sounds[1].play();
+
+}
+
+}
+//alert("You can't escape from this World NoW!");//Exit to Main Menu
+}
+else if((y>=wcanvas.height / 2+10&&y<=wcanvas.height / 2+10+20)&&(x>=wcanvas.width / 2+22&&x<=wcanvas.width / 2+22+50)){//Exit Menu
+if(Menu_Sounds.length!=0){
+if(Menu_Sounds[1].readyState)
+{
+Menu_Sounds[1].currentTime=0; 
+Menu_Sounds[1].play();
+//alert(Menu_Sounds.length);
+}
+
+}
+HUDBar.status='DIS';//Continue Playing
+}
+else if((y>=wcanvas.height / 2+85&&y<=wcanvas.height / 2+85+25)&&(x>=wcanvas.width / 2+57&&x<=wcanvas.width / 2+57+25)){//music +
+
+Music_Volume=(Music_Volume+sound_increment<=1)?(Music_Volume+sound_increment):1;
+}
+else if((y>=wcanvas.height / 2+85&&y<=wcanvas.height / 2+85+25)&&(x>=wcanvas.width / 2+97&&x<=wcanvas.width / 2+97+25)){//music -
+
+Music_Volume=(Music_Volume-sound_increment>=0)?(Music_Volume-sound_increment):0;
+}
+else if((y>=wcanvas.height / 2+115&&y<=wcanvas.height / 2+115+25)&&(x>=wcanvas.width / 2+57&&x<=wcanvas.width / 2+57+25)){//sfx +
+
+SFX_Volume=(SFX_Volume+sound_increment<=1)?(SFX_Volume+sound_increment):1;
+if(Menu_Sounds.length!=0){
+if(Menu_Sounds[1].readyState)
+{
+Menu_Sounds[1].currentTime=0; 
+Menu_Sounds[1].play();
+
+}
+
+}
+}
+else if((y>=wcanvas.height / 2+115&&y<=wcanvas.height / 2+115+25)&&(x>=wcanvas.width / 2+97&&x<=wcanvas.width / 2+97+25)){//sfx -
+
+SFX_Volume=(SFX_Volume-sound_increment>=0)?(SFX_Volume-sound_increment):0;
+if(Menu_Sounds.length!=0){
+if(Menu_Sounds[1].readyState)
+{
+Menu_Sounds[1].currentTime=0; 
+Menu_Sounds[1].play();
+
+}
+
+}
+}
+/*var Music_Volume=0.4;
+var SFX_Volume=1.0;
+var sound_increment=0.05;
+  
+  */
+  
+  //wAssets.rect(wcanvas.width / 2+57, wcanvas.height / 2+85,25,25);//music +
+	//	wAssets.rect(wcanvas.width / 2+97, wcanvas.height / 2+85,25,25);//music -
+		///wAssets.rect(wcanvas.width / 2+57, wcanvas.height / 2+115,25,25);//sfx +
+		//wAssets.rect(wcanvas.width / 2+97, wcanvas.height / 2+115,25,25);//sfx -
+
+}
+
+
+}
+function Mouse_Up(e){
+
+interactionDebounce=false;
+//ClickHit=false;
+}
+function Mouse_Move(e){
+var x = e.clientX-guiCanvas.getBoundingClientRect().left;//origin of mouse now center to earth
+var y = e.clientY-guiCanvas.getBoundingClientRect().top;
+if(HUDBar.status!='Main_Menu'){
+if((y>=462&&y<=480)&&(x>25&&x<105)){//Char Menu
+  if(Menu_Sounds.length!=0){
+if(Menu_Sounds[2].readyState)
+{
+if(!Menu_Sounds[2].ended)
+{Menu_Sounds[2].play();}
+//alert(Menu_Sounds.length);
+}
+}
+Pent_Spin_Show=true;
+Pent_Spin.setPosition(10,462);
+}
+else if((y>=482&&y<=505)&&(x>25&&x<105)){//Quest Menu
+  if(Menu_Sounds.length!=0){
+if(Menu_Sounds[2].readyState)
+{
+if(!Menu_Sounds[2].ended)
+{Menu_Sounds[2].play();}
+//alert(Menu_Sounds.length);
+}
+}
+Pent_Spin_Show=true;
+Pent_Spin.setPosition(10,482);
+}
+else if((y>=522&&y<=540)&&(x>25&&x<105)){//Map Menu
+  if(Menu_Sounds.length!=0){
+if(Menu_Sounds[2].readyState)
+{
+if(!Menu_Sounds[2].ended)
+{Menu_Sounds[2].play();}
+//alert(Menu_Sounds.length);
+}
+}
+Pent_Spin_Show=true;
+Pent_Spin.setPosition(10,522);
+}
+else if((y>=546&&y<=567)&&(x>25&&x<105)){//Main Menu
+  if(Menu_Sounds.length!=0){
+if(Menu_Sounds[2].readyState)
+{
+if(!Menu_Sounds[2].ended)
+{Menu_Sounds[2].play();}
+//alert(Menu_Sounds.length);
+}
+}
+Pent_Spin_Show=true;
+Pent_Spin.setPosition(10,546);
+}
+else if((y>=462&&y<=480)&&(x>612&&x<694)){//Inventory Menu
+  if(Menu_Sounds.length!=0){
+if(Menu_Sounds[2].readyState)
+{
+if(!Menu_Sounds[2].ended)
+{Menu_Sounds[2].play();}
+//alert(Menu_Sounds.length);
+}
+}
+Pent_Spin_Show=true;
+Pent_Spin.setPosition(690,462);
+}
+else if((y>=482&&y<=505)&&(x>612&&x<694)){//Spells Menu
+  if(Menu_Sounds.length!=0){
+if(Menu_Sounds[2].readyState)
+{
+if(!Menu_Sounds[2].ended)
+{Menu_Sounds[2].play();}
+//alert(Menu_Sounds.length);
+}
+}
+Pent_Spin_Show=true;
+Pent_Spin.setPosition(690,482);
+}
+else if(HUDBar.status=='Inv'){
+if((y>=497&&y<=497+15)&&(x>=230&&x<=230+105)){//No Weapon
+  if(Menu_Sounds.length!=0){
+if(Menu_Sounds[2].readyState)
+{
+if(!Menu_Sounds[2].ended)
+{Menu_Sounds[2].play();}
+//alert(Menu_Sounds.length);
+}
+}
+Pent_Spin.setPosition(210,495);
+}
+else if((y>=497&&y<=497+15)&&(x>=350&&x<=350+45)){//Axe
+  if(Menu_Sounds.length!=0){
+if(Menu_Sounds[2].readyState)
+{
+if(!Menu_Sounds[2].ended)
+{Menu_Sounds[2].play();}
+//alert(Menu_Sounds.length);
+}
+}
+Pent_Spin.setPosition(330,495);
+}
+else if((y>=513&&y<=513+15)&&(x>=230&&x<=230+65)){//Sword
+  if(Menu_Sounds.length!=0){
+if(Menu_Sounds[2].readyState)
+{
+if(!Menu_Sounds[2].ended)
+{Menu_Sounds[2].play();}
+//alert(Menu_Sounds.length);
+}
+}
+Pent_Spin.setPosition(210,510);
+}
+else if((y>=513&&y<=513+15)&&(x>=350&&x<=350+165)){//Sword and shield
+  if(Menu_Sounds.length!=0){
+if(Menu_Sounds[2].readyState)
+{
+if(!Menu_Sounds[2].ended)
+{Menu_Sounds[2].play();}
+//alert(Menu_Sounds.length);
+}
+}
+Pent_Spin.setPosition(330,510);
+}
+else if((y>=528&&y<=528+15)&&(x>=230&&x<=230+55)){//Mace
+  if(Menu_Sounds.length!=0){
+if(Menu_Sounds[2].readyState)
+{
+if(!Menu_Sounds[2].ended)
+{Menu_Sounds[2].play();}
+//alert(Menu_Sounds.length);
+}
+}
+Pent_Spin.setPosition(210,525);
+}
+else if((y>=528&&y<=528+15)&&(x>=350&&x<=350+155)){//Mace and shield
+  if(Menu_Sounds.length!=0){
+if(Menu_Sounds[2].readyState)
+{
+if(!Menu_Sounds[2].ended)
+{Menu_Sounds[2].play();}
+//alert(Menu_Sounds.length);
+}
+}
+Pent_Spin.setPosition(330,525);
+}
+else if((y>=543&&y<=543+15)&&(x>=230&&x<=230+60)){//Staff
+  if(Menu_Sounds.length!=0){
+if(Menu_Sounds[2].readyState)
+{
+if(!Menu_Sounds[2].ended)
+{Menu_Sounds[2].play();}
+//alert(Menu_Sounds.length);
+}
+}
+Pent_Spin.setPosition(210,540);
+}
+
+}
+else if((y>=wcanvas.height / 2+8&&y<=wcanvas.height / 2+8+22)&&(x>=wcanvas.width / 2-55&&x<=wcanvas.width / 2-55+110))
+{if(HUDBar.status=='TRAP')
+{
+  if(Menu_Sounds.length!=0){
+if(Menu_Sounds[2].readyState)
+{
+if(!Menu_Sounds[2].ended)
+{Menu_Sounds[2].play();}
+//alert(Menu_Sounds.length);
+}
+}
+Pent_Spin_Show=true;
+Pent_Spin.setPosition(wcanvas.width / 2-75,wcanvas.height / 2+8);
+}
+}
+
+
+else {
+  if(Menu_Sounds.length!=0){
+if(Menu_Sounds[2].readyState)
+{
+{Menu_Sounds[2].currentTime=0;}
+//alert(Menu_Sounds.length);
+}
+}
+
+Pent_Spin_Show=false;}
+
+}
+else if(HUDBar.status=='Main_Menu'){
+if((y>=wcanvas.height / 2+10&&y<=wcanvas.height / 2+10+20)&&(x>=wcanvas.width / 2-68&&x<=wcanvas.width / 2-68+50)){//Exit Menu
+  if(Menu_Sounds.length!=0){
+if(Menu_Sounds[2].readyState)
+{
+if(!Menu_Sounds[2].ended)
+{Menu_Sounds[2].play();}
+//alert(Menu_Sounds.length);
+}
+}
+Pent_Spin_Show=true;
+Pent_Spin.setPosition(wcanvas.width / 2-92,wcanvas.height / 2+7);
+}
+else if((y>=wcanvas.height / 2+10&&y<=wcanvas.height / 2+10+20)&&(x>=wcanvas.width / 2+22&&x<=wcanvas.width / 2+22+50)){//Exit Menu
+  if(Menu_Sounds.length!=0){
+if(Menu_Sounds[2].readyState)
+{
+if(!Menu_Sounds[2].ended)
+{Menu_Sounds[2].play();}
+//alert(Menu_Sounds.length);
+}
+}
+Pent_Spin_Show=true;
+Pent_Spin.setPosition(wcanvas.width / 2-2,wcanvas.height / 2+7);}
+else {
+  if(Menu_Sounds.length!=0){
+if(Menu_Sounds[2].readyState)
+{
+{Menu_Sounds[2].currentTime=0;}
+//alert(Menu_Sounds.length);
+}
+}Pent_Spin_Show=false;}
+}
+
+if(MainHero.Dead==true){
+
+if((y>=wcanvas.height / 2+10&&y<=wcanvas.height / 2+10+25)&&(x>=wcanvas.width / 2-65&&x<=wcanvas.width / 2-65+130))
+{  if(Menu_Sounds.length!=0){
+if(Menu_Sounds[2].readyState)
+{
+if(!Menu_Sounds[2].ended)
+{Menu_Sounds[2].play();}
+//alert(Menu_Sounds.length);
+}
+}
+Pent_Spin.setPosition(wcanvas.width / 2-88,wcanvas.height / 2+10);
+Pent_Spin_Show=true;
+}
+else {
+  if(Menu_Sounds.length!=0){
+if(Menu_Sounds[2].readyState)
+{
+{Menu_Sounds[2].currentTime=0;}
+//alert(Menu_Sounds.length);
+}
+}
+Pent_Spin_Show=false;}
+
+}
+
+
+
+if(TownsMen_Conversation==true)
+{
+if((y>=315&&y<=335)&&(x>wcanvas.width / 2-40&&x<wcanvas.width / 2-40+80))
+{  if(Menu_Sounds.length!=0){
+if(Menu_Sounds[2].readyState)
+{
+if(!Menu_Sounds[2].ended)
+{Menu_Sounds[2].play();}
+//alert(Menu_Sounds.length);
+}
+}
+Pent_Spin.setPosition(wcanvas.width / 2-60,312);
+Pent_Spin_Show=true;
+}
+else if(TownsMen_ConverseSequence)
+{
+if((y>=260&&y<=260+20)&&(x>wcanvas.width / 2-40&&x<wcanvas.width / 2-40+80))//Gossip
+{  if(Menu_Sounds.length!=0){
+if(Menu_Sounds[2].readyState)
+{
+if(!Menu_Sounds[2].ended)
+{Menu_Sounds[2].play();}
+//alert(Menu_Sounds.length);
+}
+}
+Pent_Spin.setPosition(wcanvas.width / 2-52,260);
+Pent_Spin_Show=true;
+}
+else if((y>=235&&y<=235+20)&&(x>wcanvas.width / 2-50&&x<wcanvas.width / 2-50+100))
+{  if(Menu_Sounds.length!=0){
+if(Menu_Sounds[2].readyState)
+{
+if(!Menu_Sounds[2].ended)
+{Menu_Sounds[2].play();}
+//alert(Menu_Sounds.length);
+}
+}
+Pent_Spin.setPosition(wcanvas.width / 2-70,235);
+Pent_Spin_Show=true;
+}
+
+
+
+}
+else if(TownsMen_Sell)//Selling Pen 
+{ 
+ for(var i=0;i<TownsMen_Array.length;i++){
+ var pos=180+(i*20);
+ var text_width=(wAssets.measureText(TownsMen_Array[i])).width;
+ if((y>=pos-15&&y<=pos+5)&&(x>wcanvas.width / 2-text_width/2&&x<wcanvas.width / 2-text_width/2+text_width))
+ {
+  if(Menu_Sounds.length!=0){
+if(Menu_Sounds[2].readyState)
+{
+if(!Menu_Sounds[2].ended)
+{Menu_Sounds[2].play();}
+//alert(Menu_Sounds.length);
+}
+} 
+ Pent_Spin.setPosition(wcanvas.width / 2-text_width/2-25,pos-15);
+ Pent_Spin_Show=true;
+ }
+ }
+
+}
+
+else {
+  if(Menu_Sounds.length!=0){
+if(Menu_Sounds[2].readyState)
+{
+{Menu_Sounds[2].currentTime=0;}
+//alert(Menu_Sounds.length);
+}
+}
+Pent_Spin_Show=false;}
+}
+
+
+
+
+return {x:x,y:y};
+
+}
+
+function Potions_MoveClick(e){
+var x = e.clientX-guiCanvas.getBoundingClientRect().left;//origin of mouse now center to earth
+var y = e.clientY-guiCanvas.getBoundingClientRect().top;
+ for(var i=0;i<MainHero.Potion_Caps.length;i++){//Potion HUD
+ 	 if(MainHero.Potion_Caps[i]=='h')
+	 {
+		//wAssets.drawImage(items[0],238+(i*32)-i,461,28,28);
+	 if((y>=461&&y<=461+28)&&(x>238+(i*32)-i&&x<238+(i*32)-i+28))
+	 {
+	 if(HUD_Sounds.length!=0){
+	 if(HUD_Sounds[0].readyState)
+{
+HUD_Sounds[0].currentTime=0; 
+HUD_Sounds[0].play();
+//alert(Menu_Sounds.length);
+}}
+	 MainHero.HealthPoints=(MainHero.HealthPoints+2>=MainHero.MaxHealthPoints)?MainHero.MaxHealthPoints:MainHero.HealthPoints+2;
+	MainHero.Potion_Caps[i]='e';
+	 }
+
+	 }
+	 	else if(MainHero.Potion_Caps[i]=='L')
+	 {
+	//wAssets.drawImage(items[0],238+(i*32)-i,461,28,28);
+	 if((y>=461&&y<=461+28)&&(x>238+(i*32)-i&&x<238+(i*32)-i+28))
+	 {
+	  if(HUD_Sounds.length!=0){
+	 if(HUD_Sounds[0].readyState)
+{
+HUD_Sounds[0].currentTime=0; 
+HUD_Sounds[0].play();
+//alert(Menu_Sounds.length);
+}}
+	 MainHero.HealthPoints=(MainHero.HealthPoints+4>=MainHero.MaxHealthPoints)?MainHero.MaxHealthPoints:MainHero.HealthPoints+4;
+	MainHero.Potion_Caps[i]='e';
+	 }
+
+	 }
+
+ 
+ }
+
+}
+
+function Potions_MouseMove(e)
+{
+var x = e.clientX-guiCanvas.getBoundingClientRect().left;//origin of mouse now center to earth
+var y = e.clientY-guiCanvas.getBoundingClientRect().top;
+ for(var i=0;i<MainHero.Potion_Caps.length;i++){//Potion HUD
+ 	 if(MainHero.Potion_Caps[i]=='h'||MainHero.Potion_Caps[i]=='L')
+	 {
+		//wAssets.drawImage(items[0],238+(i*32)-i,461,28,28);
+	 if((y>=461&&y<=461+28)&&(x>238+(i*32)-i&&x<238+(i*32)-i+28))
+	 {
+	   if(Menu_Sounds.length!=0){
+if(Menu_Sounds[2].readyState)
+{
+if(!Menu_Sounds[2].ended)
+{Menu_Sounds[2].play();}
+//alert(Menu_Sounds.length);
+}
+} 
+	HUDBar.Potion[i]=true;
+	 }
+else{	
+  if(Menu_Sounds.length!=0){
+if(Menu_Sounds[2].readyState)
+{
+{Menu_Sounds[2].currentTime=0;}
+//alert(Menu_Sounds.length);
+}
+}
+
+
+ HUDBar.Potion[i]=false;}
+	 }
+
+ 
+ }
+}
+function handleMouseRelease(e){
+
+}
+
+
+
+
+
+for(var i in json.merge){
+ASSET_MANAGER.queueDownload(json.merge[i]);
+}
+for(var i in json.HUD){
+ASSET_MANAGER.queueDownload(json.HUD[i]);
+}
+for(var i in json.enemies){
+
+ASSET_MANAGER.queueDownload(json.enemies[i]);
+}
+
+for(var i in json.townsmen){
+
+ASSET_MANAGER.queueDownload(json.townsmen[i]);
+}
+for(var i in json.MainHero){
+
+ASSET_MANAGER.queueDownload(json.MainHero[i]);
+}
+for(var i in json.items){
+
+ASSET_MANAGER.queueDownload(json.items[i]);
+}
+
+var Keys={UP:38,DOWN:40,LEFT:37,RIGHT:39};
+var Potion_Keys={One:49,Two:50,Three:51,Four:52,Five:53,Six:54,Seven:55,Eight:56};
+
+
+
+//var tile,dirt;
+
+
+
+
+var startcol=0;
+
+var startrow=0;
+
+//HUD
+function HUD(){
+ wAssets.font='DIABLO';
+if(MainHero.HealthPoints<=0)// Dead screen
+{	MainHero.HealthPoints=0;
+	wAssets.save();
+ wAssets.beginPath();
+  wAssets.fillStyle = 'red';
+		wAssets.rect(0, 0, 720, 450);
+   	wAssets.globalAlpha = 0.4;
+		 wAssets.fill();
+	   wAssets.restore();
+		 	wAssets.save();
+			 wAssets.beginPath();
+			 	wAssets.globalAlpha = 0.8;
+				     wAssets.font = '30px DIABLO';
+      wAssets.textAlign = 'center';
+      wAssets.fillStyle = 'GOLD';
+		   wAssets.fillText('You are SLAINED!', wcanvas.width / 2, wcanvas.height / 2);
+		     wAssets.font = '25px DIABLO';
+		wAssets.fillText('Respawn', wcanvas.width / 2, wcanvas.height / 2+30);
+      wAssets.restore();
+	/*wAssets.save();
+	   wAssets.beginPath();
+      wAssets.rect(wcanvas.width / 2-65,wcanvas.height / 2+10, 130,25);//no weapon
+	
+      wAssets.lineWidth = 2;
+      wAssets.strokeStyle = 'gold';
+      wAssets.stroke();
+	wAssets.restore(); //line border for Weapon selection*/
+	MainHero.Dead=true;
+}
+	if(HUDBar.status=='TRAP'){//trap screen
+	wAssets.save();
+ wAssets.beginPath();
+  wAssets.fillStyle = 'black';
+		wAssets.rect(0, 0, 720, 450);
+   	wAssets.globalAlpha = 0.9;
+		 wAssets.fill();
+	   wAssets.restore();
+		 	wAssets.save();
+			 wAssets.beginPath();
+			 		wAssets.shadowColor = 'red';
+      wAssets.shadowBlur = 20;
+      wAssets.shadowOffsetX = 2;
+      wAssets.shadowOffsetY = 2;
+				     wAssets.font = '20px DIABLO';
+      wAssets.textAlign = 'center';
+      wAssets.fillStyle = 'GOLD';
+		   wAssets.fillText(HUDBar.Trap_Message, wcanvas.width / 2, wcanvas.height / 2);
+			wAssets.fillText('Proceed', wcanvas.width / 2, wcanvas.height / 2+25);
+      wAssets.restore();
+
+	}
+
+wAssets.drawImage(HUD[0],0,450,730,130);
+Health.setBar(MainHero.HealthPoints);
+ManaPoints.setBar(MainHero.ManaPoints);
+Health.draw(wAssets,HUD[1]);
+ManaPoints.draw(wAssets,HUD[3]);
+
+wAssets.drawImage(HUD[2],16,455,685,120);
+
+
+	wAssets.save();
+ wAssets.fillStyle = 'white';
+  wAssets.textAlign = 'start';
+wAssets.font = 'italic 10px DIABLO';//Engine label
+wAssets.fillText('ISOHACK created By Philip 500N', 330, 560);
+ wAssets.restore();
+ HUD_element();
+ if(Pent_Spin_Show==true)
+ 	{
+	Pent_Spin.animate(Menu[1],timer);}
+}
+
+//HUD Element
+function HUD_element()
+{		
+	if(HUDBar.status=='DIS')
+	{	}
+	if(HUDBar.status=='Char')
+	{
+		wAssets.save();
+			  wAssets.textAlign = 'start';
+		wAssets.fillStyle = 'white';
+		wAssets.font = ' 12px DIABLO';//Engine label
+		wAssets.fillText('Health Points: '+MainHero.HealthPoints, 230, 510);
+		wAssets.fillText('Gold Points: '+MainHero.GoldPoints, 370, 510);
+		wAssets.fillText('Mana Points: '+MainHero.ManaPoints, 230, 525);
+		wAssets.fillText('Hit Points: '+MainHero.HitPoints, 230, 540);
+		wAssets.restore();	}
+	if(HUDBar.status=='Quest')
+	{	
+	wAssets.save();
+		wAssets.fillStyle = 'white';
+			  wAssets.textAlign = 'start';
+		wAssets.font = ' 12px DIABLO';//Engine label
+		wAssets.fillText('Main Quest: ',220, 510);
+		TownsMen_Menu_Text(wAssets,HUDBar.Main_Quest,315,510,240,10);
+		wAssets.fillText('Side Quest: '+HUDBar.Side_Quest, 220, 540);
+		wAssets.restore();	
+	
+	}
+	if(HUDBar.status=='Map')
+	{	wAssets.save();
+		wAssets.fillStyle = 'white';
+		  wAssets.textAlign = 'start';
+		wAssets.font = ' 15px DIABLO';//Engine label
+		wAssets.fillText('Character x-position: '+scroll.x, 220, 510);
+
+		wAssets.fillText('Character y-position: '+scroll.y, 220, 540);
+		wAssets.restore();	
+	
+	}
+	if(HUDBar.status=='Main_Menu')
+	{	wAssets.save();
+	   wAssets.beginPath();
+	   wAssets.shadowColor = 'red';
+		  wAssets.shadowBlur = 20;
+      wAssets.shadowOffsetX = 2;
+      wAssets.shadowOffsetY = 2;
+     
+      wAssets.rect(wcanvas.width / 2-120, wcanvas.height / 2-30, 240,80);
+	  
+      wAssets.fillStyle = 'black';
+      wAssets.fill();
+      wAssets.lineWidth = 4;
+      wAssets.strokeStyle = 'gold';
+      wAssets.stroke();
+
+      wAssets.rect(wcanvas.width / 2-68, wcanvas.height / 2+10, 50,20);
+      wAssets.rect(wcanvas.width / 2+22, wcanvas.height / 2+10, 50,20);
+      wAssets.lineWidth = 2;
+
+      wAssets.stroke();
+	wAssets.restore();	
+	//Sounds Options
+		wAssets.save();
+	   wAssets.beginPath();
+	   wAssets.shadowColor = 'blue';
+		  wAssets.shadowBlur = 20;
+      wAssets.shadowOffsetX = 2;
+      wAssets.shadowOffsetY = 2;
+     
+  
+	   wAssets.rect(wcanvas.width / 2-150, wcanvas.height / 2+70, 300,80);
+      wAssets.fillStyle = 'black';
+      wAssets.fill();
+      wAssets.lineWidth = 4;
+      wAssets.strokeStyle = 'silver';
+      wAssets.stroke();
+      wAssets.lineWidth = 2;
+
+      wAssets.stroke();
+	wAssets.restore();	
+	//Sounds
+	//Exit Command
+	wAssets.save();
+	 	 
+		wAssets.fillStyle = 'white';
+		 wAssets.textAlign = 'center';
+	
+		wAssets.font = ' 15px DIABLO';//
+	 wAssets.fillText('Do You Wish To Exit?', wcanvas.width / 2, wcanvas.height / 2);
+		wAssets.restore();	
+			wAssets.save();
+			  wAssets.textAlign = 'start';
+		wAssets.fillStyle = 'white';
+		wAssets.font = ' 15px DIABLO';//
+	 wAssets.fillText('YES', wcanvas.width / 2-60, wcanvas.height / 2+25);
+		wAssets.fillStyle = 'white';
+		wAssets.font = ' 15px DIABLO';//
+	 wAssets.fillText('NO', wcanvas.width / 2+35, wcanvas.height / 2+25);
+		wAssets.restore();	
+		//Exit Command
+		//Sound Options
+			wAssets.save();
+	 	 
+		wAssets.fillStyle = 'white';
+		 wAssets.textAlign = 'center';
+	
+		wAssets.font = ' 15px DIABLO';//
+	 wAssets.fillText('Do You Wish To Exit?', wcanvas.width / 2, wcanvas.height / 2);
+		wAssets.restore();	
+			wAssets.save();
+			  wAssets.textAlign = 'center';
+		wAssets.fillStyle = 'white';
+		wAssets.font = ' 25px DIABLO';//var Music_Volume=0.4;
+//var SFX_Volume=1.0;
+
+	 wAssets.fillText(Music_Volume.toFixed(1), wcanvas.width / 2, wcanvas.height / 2+105);
+	 	 wAssets.fillText('+', wcanvas.width / 2+70, wcanvas.height / 2+105);
+		 wAssets.fillText('-', wcanvas.width / 2+110, wcanvas.height / 2+105);
+		wAssets.fillStyle = 'white';
+		wAssets.font = ' 25px DIABLO';//
+	 wAssets.fillText(SFX_Volume.toFixed(1), wcanvas.width / 2, wcanvas.height / 2+135);
+	  wAssets.fillText('+', wcanvas.width / 2+70, wcanvas.height / 2+135);
+		 wAssets.fillText('-', wcanvas.width / 2+110, wcanvas.height / 2+135);
+	 wAssets.font = ' 20px DIABLO';
+	 wAssets.fillText('Music FX', wcanvas.width / 2-90, wcanvas.height / 2+105);
+	 
+	  wAssets.fillText('Sound FX', wcanvas.width / 2-90, wcanvas.height / 2+135);
+		wAssets.restore();	
+		
+				wAssets.save();
+	   wAssets.beginPath();
+
+	    wAssets.rect(wcanvas.width / 2-25, wcanvas.height / 2+70,60,80);
+      wAssets.lineWidth = 2;
+      wAssets.strokeStyle = 'silver';
+      wAssets.stroke();
+	wAssets.restore();	
+		wAssets.save();
+	   wAssets.beginPath();
+
+	    wAssets.rect(wcanvas.width / 2+57, wcanvas.height / 2+85,25,25);//music +
+		wAssets.rect(wcanvas.width / 2+97, wcanvas.height / 2+85,25,25);//music -
+		wAssets.rect(wcanvas.width / 2+57, wcanvas.height / 2+115,25,25);//sfx +
+		wAssets.rect(wcanvas.width / 2+97, wcanvas.height / 2+115,25,25);//sfx -
+      wAssets.lineWidth = 2;
+      wAssets.strokeStyle = 'silver';
+      wAssets.stroke();
+	wAssets.restore();	
+		
+		
+		
+	}
+	if(HUDBar.status=='Inv')
+	{	/*	wAssets.save();
+	   wAssets.beginPath();
+      wAssets.rect(230,497, 105,15);//no weapon
+	   wAssets.rect(350,497, 45,15);//Axe
+	  wAssets.rect(230,513, 65,15);//Sword
+	  wAssets.rect(350,513, 165,15);//Sword and shield
+	   wAssets.rect(230,528, 55,15);//Mace
+	   wAssets.rect(350,528, 155,15);//Mace and shield
+	    wAssets.rect(230,543, 60,15);//Staff
+      wAssets.lineWidth = 2;
+      wAssets.strokeStyle = 'gold';
+      wAssets.stroke();
+	wAssets.restore();	*/ //line border for Weapon selection
+	
+		wAssets.save();
+		  wAssets.textAlign = 'start';
+		wAssets.fillStyle = 'white';
+		wAssets.font = ' 15px DIABLO';//Engine label
+		wAssets.fillText('No Weapon', 230, 510);
+		wAssets.fillText('Axe', 350, 510);
+		wAssets.fillText('Sword', 230, 525);
+		wAssets.fillText('Sword and Shield', 350, 525);
+		wAssets.fillText('Mace', 230, 540);
+		wAssets.fillText('Mace and Shield', 350, 540);
+		wAssets.fillText('Staff', 230, 555);
+		wAssets.restore();	
+	}
+	if(HUDBar.status=='Spells')
+	{	  wAssets.textAlign = 'start';
+		wAssets.save();
+		wAssets.fillStyle = 'white';
+		wAssets.font = ' 20px DIABLO';//Engine label
+	     wAssets.textAlign = 'center';
+		wAssets.fillText('Spells not Available',wcanvas.width / 2, 530);
+		wAssets.fillText('N/A',652, 547);
+		wAssets.restore();	
+	
+	
+	}
+ for(var i=0;i<MainHero.Potion_Caps.length;i++){//Potion HUD
+ 	 if(MainHero.Potion_Caps[i]=='h')
+	 {	wAssets.save();
+		if(HUDBar.Potion[i])
+			{
+			 		wAssets.shadowColor = 'white';
+      wAssets.shadowBlur = 20;
+      wAssets.shadowOffsetX = 0.5;
+      wAssets.shadowOffsetY = 0.5;
+			
+			}
+		wAssets.drawImage(items[0],0,0,28,28,236+(i*32)-i,461,28,28);
+		wAssets.restore();	
+	 }
+	else  if(MainHero.Potion_Caps[i]=='L')
+	 {	wAssets.save();
+		if(HUDBar.Potion[i])
+			{
+			 		wAssets.shadowColor = 'white';
+      wAssets.shadowBlur = 20;
+      wAssets.shadowOffsetX = 0.5;
+      wAssets.shadowOffsetY = 0.5;
+			
+			}
+		wAssets.drawImage(items[0],28,0,28,28,236+(i*32)-i,461,28,28);
+		wAssets.restore();	
+	 }
+	 wAssets.restore();	
+	 if(MainHero.Potion_Caps[i]!='e')
+	{ 
+	wAssets.save();
+	 wAssets.textAlign = 'center';
+	wAssets.font = '12px DIABLO';
+	wAssets.fillStyle = 'white';
+ 	wAssets.fillText(i+1,261+(i*32)-i,485);
+	wAssets.restore();	
+	}
+ }
+
+}
+
+//HUD Element
+
+//HUD
+function WorldRender(){
+
+
+
+update();
+
+draw(world_grid);
+if(TownsMen_Conversation)
+{
+		wAssets.textAlign = 'center';
+TownsMen_Menu(wAssets);
+}
+HUD();
+
+}
+
+
+
+function update(){
+
+		if(MainHero.HealthPoints>0)
+	{	localStorage.setItem('Health_Points',MainHero.HealthPoints);
+		localStorage.setItem('Gold_Points',MainHero.GoldPoints);
+		localStorage.setItem('Mana_Points',MainHero.ManaPoints);
+		localStorage.setItem('Hit_Points',MainHero.HitPoints);
+		localStorage.setItem('WeaponStates',MainHero.WeaponStates);
+		localStorage.setItem('Current_Level',MainHero.Current_Level);
+		localStorage.setItem('scrollx',scroll.x);
+		localStorage.setItem('scrolly',scroll.y);
+		localStorage.setItem('MainQuest',MainHero.MainQuest);
+		localStorage.setItem('SideQuest',MainHero.SideQuest);
+		localStorage.setItem('Max_Health _Points',MainHero.MaxHealthPoints);
+		
+	}
+		else if(MainHero.HealthPoints<=0)
+	{	localStorage.setItem('Health_Points',MainHero.MaxHealthPoints);
+		localStorage.setItem('Gold_Points',5000);
+		localStorage.setItem('Mana_Points',MainHero.MaxManaPoints);
+		localStorage.setItem('Hit_Points',MainHero.HitPoints);
+		localStorage.setItem('WeaponStates',2);
+		localStorage.setItem('scrollx',-1250);
+		localStorage.setItem('scrolly',2375);
+		localStorage.setItem('Current_Level',1);
+		MainHero.Potion_Caps=Array.matrix(8,1,'e');
+		//MainHero.Dead=false;
+	}
+		switch(MainHero.MainQuest)
+		{
+		case 1:HUDBar.Main_Quest='Talk to Deckard Cain';
+				break;
+				
+		case 2:HUDBar.Main_Quest='Slain the minions at outskirts';
+				break;
+		case 3:break;
+		case 4:break;
+		case 5:break;
+		case 6:break;
+		case 7:break;
+		case 8:break;
+		case 9:break;
+		case 10:break;
+		default: HUDBar.Main_Quest='No Quest Added';
+		
+		}
+		switch(MainHero.SideQuest)
+		{
+		case 1:HUDBar.Side_Quest='Explore the World';
+				break;
+				
+		case 2:break;
+		case 3:break
+		case 5:break;
+		case 6:break;
+		case 7:break;
+		case 8:break;
+		case 9:break;
+		case 10:break;
+		default: HUDBar.Main_Quest='No Quest Added';
+		
+		}
+	
+}
+function Demo_Version(){
+//MainHero.RealTimeGridPos.row=this.currentrow;
+//MainHero.RealTimeGridPos.col=this.currentcol;
+if(MainHero.RealTimeGridPos.row==33&&MainHero.RealTimeGridPos.col==4||MainHero.RealTimeGridPos.row==33&&MainHero.RealTimeGridPos.col==3||MainHero.RealTimeGridPos.row==34&&MainHero.RealTimeGridPos.col==3||MainHero.RealTimeGridPos.row==34&&MainHero.RealTimeGridPos.col==4||MainHero.RealTimeGridPos.row==33&&MainHero.RealTimeGridPos.col==2)
+{
+wAssets.save();
+			 wAssets.beginPath();
+				     wAssets.font = '25px DIABLO';
+			wAssets.shadowColor = 'Orange';
+      wAssets.shadowBlur = 20;
+      wAssets.shadowOffsetX = 1;
+      wAssets.shadowOffsetY = 1;
+      wAssets.textAlign = 'center';
+      wAssets.fillStyle = 'Black';
+		wAssets.fillText('Cave Mission Not Available', wcanvas.width / 2, wcanvas.height / 2);
+		wAssets.restore();
+}
+if(MainHero.RealTimeGridPos.row==78&&MainHero.RealTimeGridPos.col==30||MainHero.RealTimeGridPos.row==78&&MainHero.RealTimeGridPos.col==31||MainHero.RealTimeGridPos.row==77&&MainHero.RealTimeGridPos.col==30||MainHero.RealTimeGridPos.row==77&&MainHero.RealTimeGridPos.col==31||MainHero.RealTimeGridPos.row==77&&MainHero.RealTimeGridPos.col==14||MainHero.RealTimeGridPos.row==76&&MainHero.RealTimeGridPos.col==14)
+{
+wAssets.save();
+			 wAssets.beginPath();
+				     wAssets.font = '25px DIABLO';
+			wAssets.shadowColor = 'Orange';
+      wAssets.shadowBlur = 20;
+      wAssets.shadowOffsetX = 1;
+      wAssets.shadowOffsetY = 1;
+      wAssets.textAlign = 'center';
+      wAssets.fillStyle = 'Black';
+		wAssets.fillText('Dungeon Mission Not Available', wcanvas.width / 2, wcanvas.height / 2);
+		wAssets.restore();
+}
+
+
+
+}
+function startRender(){
+
+(function gameLoop(){
+clear();
+Music_fx_options();
+//SFX_options();
+if(Game_Ready){
+
+if(!Game_Mode)
+{
+GameWorld= new ActiveEntities();
+mainGrid={row:null,y:null};//Object Reconstruction error fix
+MainHero.RealTimeGridPos={row:null,col:null};
+MainHero.vGridRow=null;
+MainHero.vGridCol=null;
+Play=initGame();
+Game_Mode=true;
+
+}
+else if(Play){
+if(Menu_Sounds.length!=0){
+if(Menu_Sounds[0].readyState)
+{
+if(!Menu_Sounds[0].ended)
+Menu_Sounds[0].pause();
+Menu_Sounds[0].currentTime=0;
+//alert(Menu_Sounds.length);
+}
+}
+
+switch(MainHero.Current_Level){
+case 1:
+
+if(lvl1_Sounds.length!=0){
+if(lvl1_Sounds[0].readyState)
+{	if(MainHero.RealTimeGridPos.col>44)
+			{
+			if(lvl1_Sounds[0].length!=0){
+			if(!lvl1_Sounds[0].ended)
+			{
+			lvl1_Sounds[1].pause();
+		lvl1_Sounds[1].currentTime=0;
+			lvl1_Sounds[0].loop=true;
+	lvl1_Sounds[0].play();
+			
+			
+		//alert(Menu_Sounds.length);
+			}	}
+		}
+			else{
+				if(lvl1_Sounds[0].length!=0){
+			if(!lvl1_Sounds[1].ended)
+			{
+				lvl1_Sounds[0].pause();
+		lvl1_Sounds[0].currentTime=0;
+			
+			lvl1_Sounds[1].loop=true;
+		lvl1_Sounds[1].play();
+		//alert(Menu_Sounds.length);
+			}	}
+		}
+		
+		}}
+		break;
+case 2:break;
+case 3:break;
+case 4:break;
+default: console.log('unspecified level');		
+		}
+Pent_Spin.size=0.5;
+WorldRender();
+Demo_Version();
+}
+
+
+
+}
+
+//console.log('run');
+
+else if(!Game_Ready)
+{	
+switch(MainHero.Current_Level){
+case 1:
+if(lvl1_Sounds.length!=0){
+if(lvl1_Sounds[0].readyState)
+{
+			if(!lvl1_Sounds[0].ended)
+			{lvl1_Sounds[0].pause();
+		lvl1_Sounds[0].currentTime=0;
+		lvl1_Sounds[1].pause();
+		lvl1_Sounds[1].currentTime=0;
+		//alert(Menu_Sounds.length);
+			}	
+		}}
+		break;
+case 2:break;
+case 3:break;
+case 4:break;
+default: console.log('unspecified level');		
+		}
+if(Menu_Sounds.length!=0){
+if(Menu_Sounds[0].readyState)
+{
+if(!Menu_Sounds[0].ended)
+{Menu_Sounds[0].loop=true;
+Menu_Sounds[0].play();
+}
+//alert(Menu_Sounds.length);
+}
+}
+Pent_Spin.size=2;
+wAssets.drawImage(Menu[0],0,100,720,520);
+//Diablo_Logo.setPosition(wcanvas.width / 2-270,0);
+Diablo_Logo.animate(Menu[1],timer);
+ 	wAssets.save();
+			 wAssets.beginPath();
+				     wAssets.font = '100px DIABLO';
+			wAssets.shadowColor = 'Orange';
+      wAssets.shadowBlur = 20;
+      wAssets.shadowOffsetX = 1;
+      wAssets.shadowOffsetY = 1;
+      wAssets.textAlign = 'center';
+      wAssets.fillStyle = 'Black';
+		wAssets.fillText('HTML5', wcanvas.width / 2, wcanvas.height / 2+145);
+		wAssets.shadowBlur = 30;
+			   if(!Pent_Spin_Show)
+ 	{
+		wAssets.shadowColor = 'silver';}
+		else {wAssets.shadowColor = 'red';}
+      wAssets.font = '60px DIABLO';
+	  wAssets.fillText('INCIPE LUDUS', wcanvas.width / 2, wcanvas.height / 2+230);
+	  wAssets.restore();
+	/*  wAssets.save();
+	   wAssets.beginPath();
+      wAssets.rect(100,480,520,70);//no weapon
+      wAssets.lineWidth = 2;
+      wAssets.strokeStyle = 'gold';
+      wAssets.stroke();
+	wAssets.restore();	*/
+	   if(Pent_Spin_Show==true)
+ 	{
+	Pent_Spin.animate(Menu[1],timer);}
+
+	wAssets.save();
+	wAssets.textAlign = 'start';
+ wAssets.fillStyle = 'white';
+wAssets.font = 'italic 10px DIABLO';//Engine label
+wAssets.fillText('ISOHACK created By Philip 500N', 330, 570);
+ wAssets.restore();
+	  
+}
+window.requestAnimationFrame(gameLoop);
+})();
+
+
+}
+
+
+// main routine
+function initGame(){
+
+//lvl_gen.TerrainTownGenerationDeco();
+//window.localStorage.clear();
+lvlStorage();
+switch(MainHero.Current_Level){
+case 1:
+
+world_grid=80;//level 1 grid size
+death=new Death(world_grid,world_grid);
+lvl_gen.TerrainTownGenerationRandomSection();
+lvl_gen.TerrainTownGenerationDeco();
+lvl_gen.TerrainTownGeneration();
+
+GameWorld.addEntities(new Healer(townsmen[0],wAssets,wcanvas,42,74));
+GameWorld.addEntities(new GrisWold(townsmen[0],wAssets,wcanvas,14,69));
+GameWorld.addEntities(new Witch(townsmen[0],wAssets,wcanvas,22,54));
+GameWorld.addEntities(new StoryTeller(townsmen[0],wAssets,wcanvas,28,70));
+GameWorld.addEntities(new TownsBoy(townsmen[0],wAssets,wcanvas,13,57));
+GameWorld.addEntities(new Drunk(townsmen[0],wAssets,wcanvas,73,75));
+GameWorld.addEntities(new Priest(townsmen[0],wAssets,wcanvas,37,65));
+GameWorld.addEntities(new Townman(townsmen[0],wAssets,wcanvas,42,58));
+GameWorld.addEntities(new Townwoman(townsmen[0],wAssets,wcanvas,58,63));
+Bridge();
+MidievalBuilding1();
+MidievalBuilding2();
+MidievalBuilding3();
+MidievalBuilding4();
+MidievalBuilding5();
+weaponstand();
+townitems();
+MerchantTent();
+townblacksmithfences();
+PotionShop();
+Trees();
+Tombstone();
+TombEnt1();
+TombEnt2();
+TombGate();
+outskirtTree();
+Cave();
+CliffCave();
+rocks();
+Tents();
+//ctx,canvas,row,col,spriteoffsetX,spriteoffsetY,spriteWidth,spriteHeight,textureatlasoffsetX,textureatlasoffsetY,spawnOffsetX,spawnOffsetY,width,height
+GameWorld.addEntities(new MainHero(Main_Hero,wAssets,wcanvas,false,world_grid));
+GameWorld.addEntities(new Zombie(enemies,wAssets,wcanvas,25,10,false,28,15,world_grid,Zombie_Sounds));
+GameWorld.addEntities(new Zombie(enemies,wAssets,wcanvas,33,13,false,35,15,world_grid,Zombie_Sounds));
+GameWorld.addEntities(new Zombie(enemies,wAssets,wcanvas,32,14,false,32,17,world_grid,Zombie_Sounds));
+GameWorld.addEntities(new GoatMan(enemies,wAssets,wcanvas,38,15,false,38,18,world_grid,GoatMan_Sounds));
+GameWorld.addEntities(new GoatMan(enemies,wAssets,wcanvas,17,27,false,17,20,world_grid,GoatMan_Sounds));
+GameWorld.addEntities(new GoatMan(enemies,wAssets,wcanvas,13,28,false,13,28,world_grid,GoatMan_Sounds));
+GameWorld.addEntities(new GoatMan(enemies,wAssets,wcanvas,11,29,false,11,29,world_grid,GoatMan_Sounds));
+GameWorld.addEntities(new GoatMan(enemies,wAssets,wcanvas,10,25,false,10,25,world_grid,GoatMan_Sounds));
+GameWorld.addEntities(new Fallen_Swd(enemies,wAssets,wcanvas,31,12,false,38,18,world_grid,Fallen_Swd_Sounds));
+GameWorld.addEntities(new Fallen_Swd(enemies,wAssets,wcanvas,30,28,false,25,28,world_grid,Fallen_Swd_Sounds));
+GameWorld.addEntities(new Fallen_Spr(enemies,wAssets,wcanvas,31,31,false,31,31,world_grid,Fallen_Spr_Sounds));
+GameWorld.addEntities(new Fallen_Spr(enemies,wAssets,wcanvas,26,17,false,26,17,world_grid,Fallen_Spr_Sounds));
+GameWorld.addEntities(new Zombie(enemies,wAssets,wcanvas,7,32,false,7,32,world_grid,Zombie_Sounds));
+GameWorld.addEntities(new Zombie(enemies,wAssets,wcanvas,12,36,false,12,36,world_grid,Zombie_Sounds));
+GameWorld.addEntities(new Skel_Axe(enemies,wAssets,wcanvas,35,19,false,35,19,world_grid,seklAxe_sounds));
+GameWorld.addEntities(new Skel_Swd(enemies,wAssets,wcanvas,40,21,false,40,21,world_grid,seklSwd_sounds));
+GameWorld.addEntities(new Skel_Swd(enemies,wAssets,wcanvas,24,35,false,24,35,world_grid,seklSwd_sounds));
+GameWorld.addEntities(new Skel_Swd(enemies,wAssets,wcanvas,22,34,false,22,34,world_grid,seklSwd_sounds));
+GameWorld.addEntities(new Skel_Swd(enemies,wAssets,wcanvas,23,33,false,23,33,world_grid,seklSwd_sounds));
+GameWorld.addEntities(new Skel_Swd(enemies,wAssets,wcanvas,33,29,false,33,31,world_grid,seklSwd_sounds));
+GameWorld.addEntities(new Zombie(enemies,wAssets,wcanvas,47,9,false,47,9,world_grid,Zombie_Sounds));
+GameWorld.addEntities(new Zombie(enemies,wAssets,wcanvas,50,10,false,50,10,world_grid,Zombie_Sounds));
+GameWorld.addEntities(new Zombie(enemies,wAssets,wcanvas,52,14,false,52,14,world_grid,Zombie_Sounds));
+GameWorld.addEntities(new Fallen_Spr(enemies,wAssets,wcanvas,44,12,false,44,15,world_grid,Fallen_Spr_Sounds));
+GameWorld.addEntities(new Fallen_Spr(enemies,wAssets,wcanvas,47,21,false,47,21,world_grid,Fallen_Spr_Sounds));
+GameWorld.addEntities(new Skel_Axe(enemies,wAssets,wcanvas,77,26,false,77,26,world_grid,seklAxe_sounds));
+GameWorld.addEntities(new Skel_Axe(enemies,wAssets,wcanvas,76,27,false,76,27,world_grid,seklAxe_sounds));
+GameWorld.addEntities(new Skel_Axe(enemies,wAssets,wcanvas,75,24,false,75,24,world_grid,seklAxe_sounds));
+GameWorld.addEntities(new Skel_Swd(enemies,wAssets,wcanvas,71,27,false,71,27,world_grid,seklSwd_sounds));
+GameWorld.addEntities(new Skel_Swd(enemies,wAssets,wcanvas,77,18,false,77,18,world_grid,seklSwd_sounds));
+GameWorld.addEntities(new Skel_Swd(enemies,wAssets,wcanvas,75,17,false,75,17,world_grid,seklSwd_sounds));
+GameWorld.addEntities(new Skel_Swd(enemies,wAssets,wcanvas,78,16,false,78,16,world_grid,seklSwd_sounds));
+GameWorld.addEntities(new Zombie(enemies,wAssets,wcanvas,53,29,false,53,29,world_grid,Zombie_Sounds));
+GameWorld.addEntities(new Zombie(enemies,wAssets,wcanvas,42,26,false,42,26,world_grid,Zombie_Sounds));
+GameWorld.addEntities(new Fallen_Swd(enemies,wAssets,wcanvas,37,27,false,37,27,world_grid,Fallen_Swd_Sounds));
+GameWorld.addEntities(new Fallen_Swd(enemies,wAssets,wcanvas,41,13,false,44,13,world_grid,Fallen_Swd_Sounds));
+GameWorld.addEntities(new Zombie(enemies,wAssets,wcanvas,40,17,false,40,24,world_grid,Zombie_Sounds));
+/*GameWorld.addEntities(new Enemy(enemies[2],38,15,0,0,false,38,19,0.1));
+GameWorld.addEntities(new Enemy(enemies[3],31,12,0,0,false,31,12,0.1));
+GameWorld.addEntities(new Enemy(enemies[4],34,16,0,0,false,34,16,0.1));
+*/
+
+for( var i in GameWorld.worldEntities){
+if(GameWorld.worldEntities[i].hero==true){
+mainGrid.row=GameWorld.worldEntities[i].herorow;
+mainGrid.col=GameWorld.worldEntities[i].herocol;
+MainHero.vGridRow=GameWorld.worldEntities[i].herorow;
+MainHero.vGridCol=GameWorld.worldEntities[i].herocol;
+}
+}
+Level_Changing();
+if(Main_Hero_Sounds[4].length!=0){//dead reset
+	
+	
+		Main_Hero_Sounds[4].currentTime=0;
+Main_Hero_Sounds[4].pause();
+			
+			}
+console.log(GameWorld.worldEntities.length);
+
+break;
+case 2:break;
+case 3:break;
+default:console.log('no mission');
+}
+return true;
+
+}
+//document.onload=function(){
+ASSET_MANAGER.downloadAll(function() {
+
+for(var i in json.merge){
+merge[i]=ASSET_MANAGER.getAsset(json.merge[i]);
+Load_Assets('merge this gonna be long ',i+1,json.merge.length);
+}
+for(var i in json.HUD){
+HUD[i]=ASSET_MANAGER.getAsset(json.HUD[i]);
+Load_Assets('HUD',i+1,json.HUD.length);
+}
+for(var i in json.townsmen){
+townsmen[i]=ASSET_MANAGER.getAsset(json.townsmen[i]);
+Load_Assets('townsmen',i+1,json.townsmen.length);
+}
+for(var i in json.MainHero){
+Main_Hero[i]=ASSET_MANAGER.getAsset(json.MainHero[i]);
+Load_Assets('Main_Hero',i+1,json.MainHero.length);
+}
+for(var i in json.items){
+items[i]=ASSET_MANAGER.getAsset(json.items[i]);
+Load_Assets('items',i+1,json.items.length);
+}
+for(var i in json.enemies){
+enemies[i]=ASSET_MANAGER.getAsset(json.enemies[i]);
+Load_Assets('enemies',i+1,json.enemies.length);
+}
+
+//event listening
+guiCanvas.addEventListener('mousedown',function(e){
+if(Game_Ready)//When Menu is fired
+{
+if(Play&&Game_Mode)
+{Global_Interact=handleMouseDown(e);
+
+HUD_MouseDown(e);
+Potions_MoveClick(e);
+
+}}
+else 
+{
+Menu_MouseDown(e);}
+e.preventDefault();
+	e.stopPropagation();
+},true);
+guiCanvas.addEventListener('mousemove',function(e){
+
+if(Game_Ready)//When Menu is fired
+{Global_MouseMove=Mouse_Move(e);
+Potions_MouseMove(e);
+}
+else{
+Menu_MouseMove(e);}
+
+e.preventDefault();
+	e.stopPropagation();
+},true);
+
+guiCanvas.addEventListener('mouseup',function(e){
+
+
+Mouse_Up(e);
+e.preventDefault();
+	e.stopPropagation();
+},true);
+document.addEventListener('keydown',function(event){handleKeyDown(event);
+									event.preventDefault();
+									},true);
+
+
+
+
+								
+
+			startRender();					
+								
+								});
+//}();
+
+
+
+
+}();
+</script>
+</body></html>
+
+
+
